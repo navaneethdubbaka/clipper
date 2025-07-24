@@ -78,25 +78,42 @@ def time_to_seconds(time_str: str) -> int:
 
 
 def download_youtube_video(url: str, output_path: str) -> str:
-    """Download YouTube video using yt-dlp - Render optimized"""
+    """Download YouTube video using yt-dlp with advanced anti-detection"""
     ydl_opts = {
-        'format': 'best[height<=720]',  # Limit quality for Render's free tier
+        'format': 'best[height<=720]',
         'outtmpl': output_path,
         'no_warnings': True,
-        # Enhanced headers to avoid 403 errors
+        'ignoreerrors': False,
+        # Advanced anti-detection headers
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-            'Referer': 'https://www.youtube.com/',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
         },
-        'force_ipv4': True,
-        'no_cache_dir': True,
+        # Enhanced extraction options
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['android', 'web', 'ios'],
+                'player_skip': ['configs'],
+                'skip': ['hls', 'dash'],
             }
-        }
+        },
+        # Additional anti-detection measures
+        'sleep_interval': 1,
+        'max_sleep_interval': 5,
+        'sleep_interval_subtitles': 1,
+        'force_ipv4': True,
+        'no_cache_dir': True,
+        'proxy': None,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
