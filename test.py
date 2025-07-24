@@ -31,7 +31,7 @@ def test_clip_creation():
     """Test video clip creation"""
     try:
         payload = {
-            "youtube_url": "https://youtu.be/eNeUu4QWDd0?si=vU2k0uIhkrxI3O-F",
+            "youtube_url": "https://youtu.be/ogjf7ORKfd8?si=4ttAi7yFUmF-wLKu",
             "start_time": "5",
             "end_time": "15"
         }
