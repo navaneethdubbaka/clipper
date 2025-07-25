@@ -5,13 +5,15 @@ import uuid
 from pathlib import Path
 from typing import Optional
 import re
+import time
+import random
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 import yt_dlp
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
 app = FastAPI(
     title="YouTube Video Clipper API",
@@ -19,7 +21,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configuration - Render-specific paths
+# Configuration - Environment variables with defaults
 MAX_DURATION = int(os.getenv("MAX_CLIP_DURATION", "300"))  # 5 minutes default
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/video_clips"))
 TEMP_DIR.mkdir(exist_ok=True)
@@ -77,53 +79,77 @@ def time_to_seconds(time_str: str) -> int:
     return int(time_str)
 
 
-def download_youtube_video(url: str, output_path: str) -> str:
-    """Download YouTube video with latest extraction methods (July 2025)"""
+def is_video_accessible(url: str) -> bool:
+    """Quick check if video is accessible"""
+    try:
+        with yt_dlp.YoutubeDL({
+            'quiet': True,
+            'no_warnings': True,
+            'socket_timeout': 10,
+            'extractor_args': {'youtube': {'player_client': ['android_testsuite']}}
+        }) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return 'title' in info and len(info.get('formats', [])) > 0
+    except:
+        return False
 
-    # Latest working extraction strategies
+
+def download_youtube_video(url: str, output_path: str) -> str:
+    """Download YouTube video with latest 2025 anti-detection methods"""
+
+    # Get environment variables for configuration
+    sleep_interval = int(os.getenv("YT_DLP_SLEEP_INTERVAL", "3"))
+    max_retries = int(os.getenv("YT_DLP_MAX_RETRIES", "5"))
+    timeout = int(os.getenv("YT_DLP_TIMEOUT", "90"))
+    user_agent = os.getenv("YT_DLP_USER_AGENT",
+                           "com.google.android.youtube.tv/2.12.08 (Linux; U; Android 9; AFTT Build/PS7329.3153N) gzip")
+
     extraction_configs = [
-        # Config 1: Android Music client (often works when others fail)
+        # Config 1: Android TV client (most reliable in 2025)
         {
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android_music'],
+                    'player_client': ['android_testsuite', 'android_vr'],
                     'player_skip': ['webpage', 'configs'],
                 }
             },
             'http_headers': {
-                'User-Agent': 'com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 12; SM-G973F) gzip',
-                'X-YouTube-Client-Name': '21',
-                'X-YouTube-Client-Version': '6.42.52',
+                'User-Agent': user_agent,
+                'X-YouTube-Client-Name': '56',
+                'X-YouTube-Client-Version': '2.12.08',
             }
         },
-        # Config 2: Android Creator Studio
+        # Config 2: YouTube Music client with latest headers
         {
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android_creator'],
+                    'player_client': ['android_music'],
                 }
             },
             'http_headers': {
-                'User-Agent': 'com.google.android.apps.youtube.creator/22.30.100 (Linux; U; Android 11) gzip',
+                'User-Agent': 'com.google.android.apps.youtube.music/7.02.52 (Linux; U; Android 13; Pixel 7) gzip',
+                'X-YouTube-Client-Name': '21',
+                'X-YouTube-Client-Version': '7.02.52',
             }
         },
-        # Config 3: TV HTML5 embedded client
+        # Config 3: Embedded client bypass
         {
             'extractor_args': {
                 'youtube': {
                     'player_client': ['tv_embedded'],
+                    'player_skip': ['configs'],
                 }
-            }
+            },
+            'age_limit': 99,
         },
-        # Config 4: Basic web with age gate bypass
+        # Config 4: Ultra-low quality fallback
         {
+            'format': 'worst[height<=360]/worst',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['web'],
-                    'skip': ['dash', 'hls'],
                 }
-            },
-            'age_limit': 99,  # Bypass age restrictions
+            }
         }
     ]
 
@@ -133,9 +159,11 @@ def download_youtube_video(url: str, output_path: str) -> str:
         'no_warnings': True,
         'no_cache_dir': True,
         'force_ipv4': True,
-        'retries': 1,
+        'retries': max_retries,
         'fragment_retries': 1,
-        'socket_timeout': 30,
+        'socket_timeout': timeout,
+        'sleep_interval': sleep_interval,
+        'max_sleep_interval': 8,
     }
 
     for i, config in enumerate(extraction_configs):
@@ -143,10 +171,9 @@ def download_youtube_video(url: str, output_path: str) -> str:
             opts = {**base_opts, **config}
 
             with yt_dlp.YoutubeDL(opts) as ydl:
-                # Pre-validate the extraction
+                # Pre-validate extraction
                 info = ydl.extract_info(url, download=False)
                 if info and ('formats' in info or 'url' in info):
-                    # Now download
                     ydl.download([url])
                     return output_path
 
@@ -155,8 +182,10 @@ def download_youtube_video(url: str, output_path: str) -> str:
             if i == len(extraction_configs) - 1:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"All extraction strategies failed. Video may be restricted or YouTube API changed. Last error: {str(e)}"
+                    detail=f"YouTube is actively blocking automated requests. All strategies failed. Last error: {str(e)}"
                 )
+            # Add random delay between strategies
+            time.sleep(random.uniform(2, 5))
             continue
 
 
@@ -194,8 +223,18 @@ def trim_video(input_path: str, output_path: str, start_time: int, end_time: int
         raise HTTPException(status_code=500, detail=f"Video processing failed: {str(e)}")
 
 
+async def download_with_human_behavior(url: str, output_path: str) -> str:
+    """Add human-like delays and behavior"""
+    # Random delay to simulate human browsing
+    await asyncio.sleep(random.uniform(3, 7))
+
+    # Run in executor to avoid blocking
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(executor, download_youtube_video, url, output_path)
+
+
 async def process_video_clip(request: ClipRequest) -> str:
-    """Process video clip in background"""
+    """Process video clip in background with enhanced error handling"""
     clip_id = str(uuid.uuid4())
 
     # Create temporary file paths
@@ -203,19 +242,23 @@ async def process_video_clip(request: ClipRequest) -> str:
     temp_clip = TEMP_DIR / f"{clip_id}_clip.mp4"
 
     try:
+        # Pre-validate video accessibility
+        if not is_video_accessible(request.youtube_url):
+            raise HTTPException(
+                status_code=400,
+                detail="Video is currently unavailable or restricted. Please try a different video."
+            )
+
         # Convert time formats
         start_seconds = time_to_seconds(request.start_time)
         end_seconds = time_to_seconds(request.end_time)
 
-        # Download video
-        loop = asyncio.get_event_loop()
-        downloaded_file = await loop.run_in_executor(
-            executor, download_youtube_video, request.youtube_url, str(temp_video)
-        )
+        # Download video with human-like behavior
+        downloaded_file = await download_with_human_behavior(request.youtube_url, str(temp_video))
 
         # Find the actual downloaded file (yt-dlp changes extension)
         actual_file = None
-        for ext in ['mp4', 'webm', 'mkv']:
+        for ext in ['mp4', 'webm', 'mkv', 'm4a']:
             potential_file = TEMP_DIR / f"{clip_id}_full.{ext}"
             if potential_file.exists():
                 actual_file = str(potential_file)
@@ -225,6 +268,7 @@ async def process_video_clip(request: ClipRequest) -> str:
             raise HTTPException(status_code=500, detail="Downloaded file not found")
 
         # Trim video
+        loop = asyncio.get_event_loop()
         output_file = await loop.run_in_executor(
             executor, trim_video, actual_file, str(temp_clip), start_seconds, end_seconds
         )
@@ -256,7 +300,8 @@ async def root():
         "message": "YouTube Video Clipper API - Deployed on Render",
         "docs": "/docs",
         "health": "/health",
-        "environment": os.getenv("RENDER_SERVICE_NAME", "development")
+        "environment": os.getenv("RENDER_SERVICE_NAME", "development"),
+        "version": "1.0.0"
     }
 
 
@@ -265,7 +310,9 @@ async def health_check():
     return {
         "status": "healthy",
         "service": os.getenv("RENDER_SERVICE_NAME", "local"),
-        "region": os.getenv("RENDER_REGION", "unknown")
+        "region": os.getenv("RENDER_REGION", "unknown"),
+        "max_duration": MAX_DURATION,
+        "temp_dir": str(TEMP_DIR)
     }
 
 
@@ -298,8 +345,27 @@ async def get_limits():
         "supported_time_formats": ["hh:mm:ss", "mm:ss", "seconds"],
         "max_video_quality": "720p",
         "supported_output_format": "mp4",
-        "max_workers": executor._max_workers
+        "max_workers": executor._max_workers,
+        "temp_directory": str(TEMP_DIR)
     }
+
+
+@app.get("/test-video")
+async def test_video_accessibility(url: str):
+    """Test if a YouTube video is accessible before processing"""
+    try:
+        accessible = is_video_accessible(url)
+        return {
+            "url": url,
+            "accessible": accessible,
+            "message": "Video is accessible" if accessible else "Video may be restricted or unavailable"
+        }
+    except Exception as e:
+        return {
+            "url": url,
+            "accessible": False,
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-API_BASE = "https://jsuullmoohfg.us-east-1.clawcloudrun.com"
+API_BASE = "https://clipper-vbuk.onrender.com/"
 
 
 def test_health():
