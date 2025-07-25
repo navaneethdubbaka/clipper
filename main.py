@@ -78,50 +78,86 @@ def time_to_seconds(time_str: str) -> int:
 
 
 def download_youtube_video(url: str, output_path: str) -> str:
-    """Download YouTube video using yt-dlp with advanced anti-detection"""
-    ydl_opts = {
-        'format': 'best[height<=720]',
-        'outtmpl': output_path,
-        'no_warnings': True,
-        'ignoreerrors': False,
-        # Advanced anti-detection headers
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-        },
-        # Enhanced extraction options
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web', 'ios'],
-                'player_skip': ['configs'],
-                'skip': ['hls', 'dash'],
+    """Download YouTube video with latest extraction methods (July 2025)"""
+
+    # Latest working extraction strategies
+    extraction_configs = [
+        # Config 1: Android Music client (often works when others fail)
+        {
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android_music'],
+                    'player_skip': ['webpage', 'configs'],
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 12; SM-G973F) gzip',
+                'X-YouTube-Client-Name': '21',
+                'X-YouTube-Client-Version': '6.42.52',
             }
         },
-        # Additional anti-detection measures
-        'sleep_interval': 1,
-        'max_sleep_interval': 5,
-        'sleep_interval_subtitles': 1,
-        'force_ipv4': True,
+        # Config 2: Android Creator Studio
+        {
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android_creator'],
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'com.google.android.apps.youtube.creator/22.30.100 (Linux; U; Android 11) gzip',
+            }
+        },
+        # Config 3: TV HTML5 embedded client
+        {
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['tv_embedded'],
+                }
+            }
+        },
+        # Config 4: Basic web with age gate bypass
+        {
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['web'],
+                    'skip': ['dash', 'hls'],
+                }
+            },
+            'age_limit': 99,  # Bypass age restrictions
+        }
+    ]
+
+    base_opts = {
+        'format': 'best[height<=720]/best',
+        'outtmpl': output_path,
+        'no_warnings': True,
         'no_cache_dir': True,
-        'proxy': None,
+        'force_ipv4': True,
+        'retries': 1,
+        'fragment_retries': 1,
+        'socket_timeout': 30,
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    for i, config in enumerate(extraction_configs):
         try:
-            ydl.download([url])
-            return output_path
+            opts = {**base_opts, **config}
+
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                # Pre-validate the extraction
+                info = ydl.extract_info(url, download=False)
+                if info and ('formats' in info or 'url' in info):
+                    # Now download
+                    ydl.download([url])
+                    return output_path
+
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to download video: {str(e)}")
+            print(f"Strategy {i + 1} failed: {str(e)}")
+            if i == len(extraction_configs) - 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"All extraction strategies failed. Video may be restricted or YouTube API changed. Last error: {str(e)}"
+                )
+            continue
 
 
 def trim_video(input_path: str, output_path: str, start_time: int, end_time: int) -> str:

@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-API_BASE = "https://clipper-iq2w.onrender.com/"
+API_BASE = "https://jsuullmoohfg.us-east-1.clawcloudrun.com"
 
 
 def test_health():
@@ -31,7 +31,7 @@ def test_clip_creation():
     """Test video clip creation"""
     try:
         payload = {
-            "youtube_url": "https://youtu.be/ogjf7ORKfd8?si=4ttAi7yFUmF-wLKu",
+            "youtube_url": "https://youtu.be/H0XYANRosVo?si=bf9X85v0zdbIzFpA",
             "start_time": "5",
             "end_time": "15"
         }
