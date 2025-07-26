@@ -23,7 +23,7 @@ app = FastAPI(
 
 # Configuration - Environment variables with defaults
 MAX_DURATION = int(os.getenv("MAX_CLIP_DURATION", "300"))  # 5 minutes default
-TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/video_clips"))
+TEMP_DIR = Path(os.getenv("TEMP_DIR", "//tmp//video_clips"))
 TEMP_DIR.mkdir(exist_ok=True)
 
 # Thread pool for blocking operations

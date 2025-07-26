@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-API_BASE = "https://clipper-vbuk.onrender.com/"
+API_BASE = "http://localhost:8000"
 
 
 def test_health():
@@ -28,32 +28,66 @@ def test_limits():
 
 
 def test_clip_creation():
-    """Test video clip creation"""
-    try:
-        payload = {
-            "youtube_url": "https://youtu.be/H0XYANRosVo?si=bf9X85v0zdbIzFpA",
-            "start_time": "5",
-            "end_time": "15"
+    """Test video clip creation with multiple fallback videos"""
+    # Known working videos (older, well-established, less likely to be restricted)
+    test_videos = [
+        {
+            "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+            "name": "Me at the zoo (2005 - First YouTube video)"
+        },
+        {
+            "url": "https://www.youtube.com/watch?v=hFcLyDb6niA",
+            "name": "Keyboard Cat (2007)"
+        },
+        {
+            "url": "https://www.youtube.com/watch?v=oHg5SJYRHA0",
+            "name": "RickRoll original (2009)"
+        },
+        {
+            "url": "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
+            "name": "Despacito (Popular music video)"
         }
+    ]
 
-        print("Creating clip... (this may take a moment)")
-        response = requests.post(f"{API_BASE}/clip", json=payload, timeout=120)
+    for i, video in enumerate(test_videos):
+        try:
+            print(f"Testing video {i + 1}/{len(test_videos)}: {video['name']}")
 
-        if response.status_code == 200:
-            # Save the clip
-            with open("test_clip.mp4", "wb") as f:
-                f.write(response.content)
+            # First test if video is accessible
+            test_response = requests.get(f"{API_BASE}/test-video?url={video['url']}")
+            if test_response.status_code == 200:
+                test_data = test_response.json()
+                print(f"  Accessibility check: {'✅ Accessible' if test_data.get('accessible') else '❌ Not accessible'}")
 
-            file_size = os.path.getsize("test_clip.mp4")
-            print(f"Clip Creation: SUCCESS - File size: {file_size} bytes")
-            return True
-        else:
-            print(f"Clip Creation Failed: {response.status_code} - {response.text}")
-            return False
+                if not test_data.get('accessible'):
+                    continue
 
-    except Exception as e:
-        print(f"Clip Creation Failed: {e}")
-        return False
+            payload = {
+                "youtube_url": video['url'],
+                "start_time": "5",
+                "end_time": "15"
+            }
+
+            print("  Creating clip... (this may take a moment)")
+            response = requests.post(f"{API_BASE}/clip", json=payload, timeout=180)
+
+            if response.status_code == 200:
+                filename = f"test_clip_{i + 1}.mp4"
+                with open(filename, "wb") as f:
+                    f.write(response.content)
+
+                file_size = os.path.getsize(filename)
+                print(f"  ✅ SUCCESS - File size: {file_size} bytes")
+                print(f"Clip Creation: SUCCESS with {video['name']}")
+                return True
+            else:
+                print(f"  ❌ Failed: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            print(f"  ❌ Error: {e}")
+
+    print("❌ All test videos failed")
+    return False
 
 
 def run_all_tests():
